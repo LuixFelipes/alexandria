@@ -2,165 +2,298 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabaseClient'
-import { Database } from '@/lib/database.types'
-import { Session } from '@supabase/auth-js'
+import type { Session } from '@supabase/supabase-js'
+import type { Database } from '@/lib/database.types'
 import ListaPapiros from './ListaPapiros'
 import FormEmprestimo from './FormEmprestimo'
 import FormCadastrarPapiro from './FormCadastrarPapiro'
-import GerenciarLeitores from './GerenciarLeitores'
 import GerenciarEmprestimos from './GerenciarEmprestimos'
-import FormEmprestimoInstitucional from './FormEmprestimoInstitucional'
-import PainelNotificacoes from './PainelNotificacoes'
 import PainelBibliothecarius from './PainelBibliothecarius'
+import MinhasConcessoes from './MinhasConcessoes'
+import GerenciarLeitores from './GerenciarLeitores'
+import PainelNotificacoes from './PainelNotificacoes'
+import FormEmprestimoInstitucional from './FormEmprestimoInstitucional'
 import { 
   BookOpen, ScrollText, Bell, LayoutDashboard, 
   LogOut, User, BookPlus, ClipboardList, Building2, 
-  Users, History, Shield, Menu as MenuIcon, ChevronLeft, 
-  ChevronRight, Pencil, X 
+  Plus, Pencil, Users 
 } from 'lucide-react'
 
 type Estudioso = Database['public']['Tables']['estudiosos']['Row']
-type ActiveView = 'catalogo' | 'concessoes' | 'acervo' | 'leitores' | 'emprestimos' | 'institucional' | 'notificacoes' | 'admin'
 
 interface DashboardProps {
   session: Session
 }
 
+type ActiveView = 'catalogo' | 'meus_emprestimos' | 'emprestimo' | 'acervo' | 'estudiosos' | 'gerenciar_emprestimos' | 'notificacoes' | 'admin' | 'emprestimo_institucional'
+
 export default function Dashboard({ session }: DashboardProps) {
   const [estudioso, setEstudioso] = useState<Estudioso | null>(null)
   const [activeView, setActiveView] = useState<ActiveView>('catalogo')
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+  const [notifsCount, setNotifsCount] = useState(0)
+  
+  // Perfil
   const [showPerfilModal, setShowPerfilModal] = useState(false)
   const [novoNome, setNovoNome] = useState('')
   const [salvandoPerfil, setSalvandoPerfil] = useState(false)
 
-  const isAdmin = true; // Forçado para testes
+  // Forçando admin como true temporariamente para você testar todas as abas
+  const isAdmin = true; // estudioso?.vinculo === 'Bibliothecarius'
 
   useEffect(() => {
     fetchEstudioso()
   }, [session.user.id])
 
   async function fetchEstudioso() {
-    const { data } = await supabase.from('estudiosos').select('*').eq('id', session.user.id).single()
+    const { data, error } = await supabase
+      .from('estudiosos')
+      .select('*')
+      .eq('id', session.user.id)
+      .single()
+    
+    if (error) console.error("Erro ao buscar estudioso:", error)
+    console.log("Seu estudioso no banco:", data)
     setEstudioso(data)
   }
 
-  async function atualizarPerfil() {
-    if (!novoNome.trim()) return
-    setSalvandoPerfil(true)
-    const { error } = await supabase.from('estudiosos').update({ nome_completo: novoNome }).eq('id', session.user.id)
-    if (!error) {
-      setEstudioso(prev => prev ? { ...prev, nome_completo: novoNome } : null)
-      setShowPerfilModal(false)
-    }
-    setSalvandoPerfil(false)
+  useEffect(() => {
+    if (!isAdmin) return
+    supabase
+      .from('concessoes')
+      .select('id', { count: 'exact' })
+      .eq('devolvido', false)
+      .lt('data_devolucao_prevista', new Date().toISOString())
+      .then(({ count }) => setNotifsCount(count ?? 0))
+  }, [isAdmin])
+
+  async function handleSignOut() {
+    await supabase.auth.signOut()
   }
 
-  const menuItems = [
-    { id: 'catalogo', label: 'Catálogo', icon: <BookOpen size={18} /> },
-    { id: 'concessoes', label: 'Meus Empréstimos', icon: <ScrollText size={18} /> },
-    { id: 'acervo', label: 'Gerenciar Acervo', icon: <BookPlus size={18} />, adminOnly: true },
-    { id: 'leitores', label: 'Gestão de Leitores', icon: <Users size={18} />, adminOnly: true },
-    { id: 'emprestimos', label: 'Empréstimos Externos', icon: <History size={18} />, adminOnly: true },
-    { id: 'institucional', label: 'Empréstimo Institucional', icon: <Shield size={18} />, adminOnly: true },
+  const navItems: { id: ActiveView; label: string; icon: React.ReactNode; adminOnly?: boolean; separator?: boolean }[] = [
+    { id: 'catalogo', label: 'Catálogo', icon: <BookOpen size={16} /> },
+    { id: 'emprestimo', label: 'Novo Empréstimo', icon: <ScrollText size={16} /> },
+    // Admin only
+    { id: 'acervo', label: 'Gerenciar Acervo', icon: <BookPlus size={16} />, adminOnly: true },
+    { id: 'estudiosos', label: 'Gerenciar Leitores', icon: <Users size={16} />, adminOnly: true },
+    { id: 'gerenciar_emprestimos', label: 'Todos os Empréstimos', icon: <ClipboardList size={16} />, adminOnly: true },
+    { id: 'emprestimo_institucional', label: 'Empréstimo Institucional', icon: <Building2 size={16} />, adminOnly: true },
+    { id: 'notificacoes', label: 'Sistema Nuntii', icon: <Bell size={16} />, adminOnly: true },
+    { id: 'admin', label: 'Painel Geral', icon: <LayoutDashboard size={16} />, adminOnly: true },
   ]
 
-  const filteredMenuItems = menuItems.filter(item => !item.adminOnly || isAdmin)
-
   return (
-    <div className="flex h-screen bg-[#F5E6CA] overflow-hidden font-garamond relative">
-      {/* Mobile Toggle Button */}
-      {!isSidebarOpen && (
-        <button 
-          onClick={() => setIsSidebarOpen(true)}
-          className="lg:hidden fixed top-4 left-4 z-[60] p-2 bg-[#3D1F0A] text-white rounded shadow-lg"
-        >
-          <MenuIcon size={24} />
-        </button>
-      )}
-
+    <div className="min-h-screen flex" style={{ backgroundColor: '#F5E6CA' }}>
       {/* Sidebar */}
-      <aside 
-        className={`fixed inset-y-0 left-0 z-50 w-72 bg-[#3D1F0A] flex flex-col transition-all duration-300 ease-in-out shadow-2xl
-          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
-        style={{ background: 'linear-gradient(180deg, #3D1F0A 0%, #5C3D2E 60%, #3D1F0A 100%)' }}
+      <aside
+        className="w-64 flex-shrink-0 flex flex-col"
+        style={{
+          background: 'linear-gradient(180deg, #3D1F0A 0%, #5C3D2E 60%, #3D1F0A 100%)',
+          boxShadow: '4px 0 16px rgba(0,0,0,0.3)',
+        }}
       >
-        <div className="p-6 border-b border-gold/20 flex items-center justify-between">
+        {/* Logo */}
+        <div className="p-6 border-b" style={{ borderColor: 'rgba(201,168,76,0.3)' }}>
           <div className="flex items-center gap-3">
-             <span className="text-3xl">🏛️</span>
-             <h1 className="font-cinzel font-bold text-sm text-[#F0D060]">Alexandria</h1>
+            <span className="text-3xl">🏛️</span>
+            <div>
+              <h1 className="font-cinzel font-bold text-sm text-gold-bright leading-tight">
+                Biblioteca de
+              </h1>
+              <h1 className="font-cinzel font-bold text-sm leading-tight" style={{ color: '#F5E6CA' }}>
+                Alexandria
+              </h1>
+            </div>
           </div>
-          <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-2 text-gold/60"><X size={24} /></button>
         </div>
 
-        <div className="px-4 py-6 border-b border-gold/10 text-white">
-          <div className="flex items-center gap-3 group relative">
-            <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-gold/20 border border-gold/40">
-              <User size={18} className="text-[#F0D060]" />
+        {/* User info */}
+        <div className="px-4 py-3 border-b" style={{ borderColor: 'rgba(201,168,76,0.2)' }}>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full flex items-center justify-center"
+              style={{ background: 'rgba(201,168,76,0.2)', border: '1px solid rgba(201,168,76,0.4)' }}>
+              <User size={14} style={{ color: '#F0D060' }} />
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-cinzel text-xs font-bold text-gold truncate">
-                {estudioso?.nome_completo || 'Estudioso'}
-              </p>
-              <div className="flex items-center gap-2">
-                 <p className="font-garamond text-[10px] italic text-white/60 truncate uppercase">Bibliothecarius</p>
-                 <button onClick={() => { setNovoNome(estudioso?.nome_completo || ''); setShowPerfilModal(true) }} className="opacity-0 group-hover:opacity-100"><Pencil size={10} className="text-gold" /></button>
+            <div className="overflow-hidden flex-1">
+              <div className="flex items-center justify-between">
+                <p className="font-cinzel text-xs truncate" style={{ color: '#F0D060' }}>
+                  {estudioso?.nome_completo || session.user.email?.split('@')[0]}
+                </p>
+                <button 
+                  onClick={() => { setNovoNome(estudioso?.nome_completo || ''); setShowPerfilModal(true) }}
+                  className="opacity-50 hover:opacity-100 transition-opacity"
+                >
+                  <Pencil size={10} className="text-gold" /> 
+                </button>
               </div>
+              <p className="font-garamond text-xs italic" style={{ color: 'rgba(245,230,202,0.6)' }}>
+                {estudioso?.vinculo || 'Estudante'}
+              </p>
             </div>
           </div>
+          {estudioso?.status_pendencia && (
+            <div className="mt-2 px-2 py-1 rounded text-xs font-cinzel badge-pendente text-center">
+              ⚠ Devolução Pendente
+            </div>
+          )}
         </div>
 
-        <nav className="flex-1 px-3 py-6 space-y-2 overflow-y-auto custom-scrollbar">
-          {filteredMenuItems.map(item => (
+        {/* Nav */}
+        <nav className="flex-1 p-3 space-y-1">
+          {/* Itens comuns */}
+          {navItems.filter(i => !i.adminOnly).map(item => (
             <button
               key={item.id}
-              onClick={() => { setActiveView(item.id as ActiveView); if (window.innerWidth < 1024) setIsSidebarOpen(false); }}
-              className={`w-full flex items-center gap-4 px-4 py-3 rounded-lg font-cinzel text-[10px] tracking-widest transition-all
-                ${activeView === item.id ? 'bg-gold text-[#3D1F0A] shadow-lg font-bold' : 'text-white/70 hover:bg-gold/10 hover:text-gold'}`}
+              onClick={() => setActiveView(item.id)}
+              className={`nav-link w-full text-left relative ${activeView === item.id ? 'active' : ''}`}
             >
               {item.icon}
-              <span className="truncate">{item.label}</span>
+              <span>{item.label}</span>
             </button>
           ))}
+
+          {/* Seção Admin */}
+          {isAdmin && (
+            <>
+              <div className="pt-3 pb-1 px-1">
+                <p className="font-cinzel text-xs uppercase tracking-widest" style={{ color: 'rgba(201,168,76,0.5)', fontSize: '0.65rem' }}>
+                  — Bibliothecarius —
+                </p>
+              </div>
+              {navItems.filter(i => i.adminOnly).map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveView(item.id)}
+                  className={`nav-link w-full text-left relative ${activeView === item.id ? 'active' : ''}`}
+                >
+                  {item.icon}
+                  <span>{item.label}</span>
+                  {item.id === 'notificacoes' && notifsCount > 0 && (
+                    <span className="ml-auto bg-purple-royal text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-cinzel">
+                      {notifsCount}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </>
+          )}
         </nav>
 
-        <div className="p-4 border-t border-gold/10 text-center">
-          <button onClick={() => supabase.auth.signOut()} className="flex items-center gap-3 text-white/40 hover:text-red-alert font-cinzel text-[9px] mx-auto">
-            <LogOut size={16} /> {isSidebarOpen && <span>SAIR DO ARQUIVO</span>}
+        {/* Realtime indicator + sign out */}
+        <div className="p-4 border-t" style={{ borderColor: 'rgba(201,168,76,0.2)' }}>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="realtime-dot" />
+            <span className="font-garamond text-xs italic" style={{ color: 'rgba(245,230,202,0.5)' }}>
+              Atualização em tempo real
+            </span>
+          </div>
+          <button
+            onClick={handleSignOut}
+            className="nav-link w-full opacity-70 hover:opacity-100"
+          >
+            <LogOut size={16} />
+            <span>Sair da Biblioteca</span>
           </button>
         </div>
       </aside>
 
-      <main className="flex-1 h-screen overflow-y-auto relative">
-        {isSidebarOpen && <div onClick={() => setIsSidebarOpen(false)} className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm" />}
-        <div className="max-w-7xl mx-auto p-4 md:p-10">
-          {activeView === 'catalogo' && <ListaPapiros isAdmin={isAdmin} />}
-          {activeView === 'acervo' && <FormCadastrarPapiro />}
-          {activeView === 'leitores' && <GerenciarLeitores />}
-          {activeView === 'emprestimos' && <GerenciarEmprestimos />}
-          {activeView === 'institucional' && <FormEmprestimoInstitucional />}
-          {activeView === 'concessoes' && <div className="p-10 text-center font-cinzel italic text-ink-light">Área de Meus Empréstimos em breve...</div>}
-        </div>
-      </main>
+      {/* Main content */}
+      <main className="flex-1 overflow-auto">
+        {/* Header */}
+        <header className="sticky top-0 z-10 px-8 py-4 border-b border-papyrus-border flex items-center justify-between"
+          style={{
+            background: 'rgba(245,230,202,0.95)',
+            backdropFilter: 'blur(8px)',
+          }}>
+            <div>
+              <h2 className="font-cinzel font-bold text-ink-dark text-lg">
+                {navItems.find(i => i.id === activeView)?.label}
+              </h2>
+              <p className="font-garamond text-ink-light text-sm italic">
+                {activeView === 'catalogo' && 'Explore os pergaminhos disponíveis na grande biblioteca'}
+                {activeView === 'emprestimo' && 'Registre a concessão de um pergaminho a um estudioso'}
+                {activeView === 'meus_emprestimos' && 'Seus pergaminhos retirados e histórico de leituras'}
+                {activeView === 'acervo' && 'Cadastre, edite e gerencie todo o acervo da biblioteca'}
+                {activeView === 'estudiosos' && 'Gerencie o cadastro e acesso dos estudiosos'}
+                {activeView === 'gerenciar_emprestimos' && 'Todos os empréstimos registrados — ativos, atrasados e histórico'}
+                {activeView === 'emprestimo_institucional' && 'Gerencie empréstimos de pergaminhos para outras instituições'}
+                {activeView === 'notificacoes' && 'Alertas de devoluções em atraso — Sistema Nuntii'}
+                {activeView === 'admin' && 'Visão geral da biblioteca — estatísticas e pendências'}
+              </p>
+            </div>
+        </header>
 
-      {/* Modal Perfil */}
-      {showPerfilModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
-          <div className="bg-[#FDFAF3] p-8 rounded-lg shadow-2xl border border-gold/30 max-w-md w-full animate-fade-in">
-            <h3 className="font-cinzel font-bold text-ink-dark text-lg mb-6">🏛️ Editar Identidade</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block font-cinzel text-[10px] uppercase text-ink-light mb-2">Seu Nome de Estudioso</label>
-                <input type="text" value={novoNome} onChange={e => setNovoNome(e.target.value)} className="w-full bg-[#f4ece0] border-b border-gold/50 p-3 font-garamond focus:outline-none" />
+        {/* View content */}
+        <div className="p-8">
+          {activeView === 'catalogo' && <ListaPapiros isAdmin={isAdmin} />}
+          {activeView === 'emprestimo' && (
+            <FormEmprestimo
+              userId={session.user.id}
+              isAdmin={isAdmin}
+              onSuccess={() => setActiveView(isAdmin ? 'gerenciar_emprestimos' : 'meus_emprestimos')}
+            />
+          )}
+          {activeView === 'meus_emprestimos' && (
+            <MinhasConcessoes userId={session.user.id} isAdmin={isAdmin} />
+          )}
+          {activeView === 'acervo' && isAdmin && <FormCadastrarPapiro />}
+          {activeView === 'estudiosos' && isAdmin && <GerenciarLeitores />}
+          {activeView === 'gerenciar_emprestimos' && isAdmin && <GerenciarEmprestimos />}
+          {activeView === 'emprestimo_institucional' && isAdmin && <FormEmprestimoInstitucional />}
+          {activeView === 'notificacoes' && isAdmin && <PainelNotificacoes />}
+          {activeView === 'admin' && isAdmin && <PainelBibliothecarius />}
+        </div>
+
+        {/* Modal Editar Perfil */}
+        {showPerfilModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+            <div className="scroll-card p-8 max-w-sm w-full space-y-6" onClick={e => e.stopPropagation()}>
+              <div className="text-center">
+                <div className="w-16 h-16 bg-gold/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-gold/30">
+                  <User size={32} className="text-gold" />
+                </div>
+                <h3 className="font-cinzel font-bold text-ink-dark">Editar seu Perfil</h3>
+                <p className="font-garamond text-ink-light text-xs italic">Como você deseja ser chamado na biblioteca?</p>
               </div>
-              <div className="flex gap-4 pt-4">
-                <button onClick={atualizarPerfil} disabled={salvandoPerfil} className="flex-1 bg-gold text-white py-3 font-cinzel text-xs hover:bg-[#b89548] transition-colors">{salvandoPerfil ? 'Atualizando...' : 'Confirmar Alteração'}</button>
-                <button onClick={() => setShowPerfilModal(false)} className="flex-1 border border-gold/20 py-3 font-cinzel text-xs hover:bg-gold/5">Cancelar</button>
+
+              <div className="space-y-2">
+                <label className="font-cinzel text-[10px] uppercase tracking-widest text-ink-mid">Nome Completo</label>
+                <input 
+                  type="text" 
+                  value={novoNome} 
+                  onChange={e => setNovoNome(e.target.value)}
+                  className="input-papyrus w-full"
+                  placeholder="Seu nome"
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <button 
+                  disabled={salvandoPerfil}
+                  onClick={async () => {
+                    setSalvandoPerfil(true)
+                    const { error } = await supabase.from('estudiosos').update({ nome_completo: novoNome }).eq('id', session.user.id)
+                    if (!error) {
+                      await fetchEstudioso()
+                      setShowPerfilModal(false)
+                    }
+                    setSalvandoPerfil(false)
+                  }}
+                  className="btn-primary flex-1 py-2 text-xs"
+                >
+                  {salvandoPerfil ? 'Salvando...' : 'Salvar Nome'}
+                </button>
+                <button 
+                  onClick={() => setShowPerfilModal(false)}
+                  className="flex-1 py-2 text-xs font-cinzel border border-papyrus-border hover:bg-papyrus-mid"
+                >
+                  Cancelar
+                </button>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </main>
     </div>
   )
 }
