@@ -81,52 +81,45 @@ export default function Dashboard({ session }: DashboardProps) {
 
       {/* Sidebar */}
       <aside 
-        className={`fixed inset-y-0 left-0 z-50 bg-[#3D1F0A] flex flex-col transition-all duration-300 ease-in-out shadow-2xl
-          ${isSidebarOpen ? 'w-72 translate-x-0' : '-translate-x-full lg:translate-x-0 lg:w-20'}`}
+        className={`fixed inset-y-0 left-0 z-50 w-72 bg-[#3D1F0A] flex flex-col transition-all duration-300 ease-in-out shadow-2xl
+          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
         style={{ background: 'linear-gradient(180deg, #3D1F0A 0%, #5C3D2E 60%, #3D1F0A 100%)' }}
       >
         <div className="p-6 border-b border-gold/20 flex items-center justify-between">
-          <div className={`flex items-center gap-3 ${!isSidebarOpen && 'lg:hidden'}`}>
+          <div className="flex items-center gap-3">
              <span className="text-3xl">🏛️</span>
              <h1 className="font-cinzel font-bold text-sm text-[#F0D060]">Alexandria</h1>
           </div>
-          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="hidden lg:block p-1.5 text-gold/60 hover:text-gold">
-            {isSidebarOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
-          </button>
           <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-2 text-gold/60"><X size={24} /></button>
         </div>
 
-        <div className="px-4 py-6 border-b border-gold/10">
-          <div className={`flex items-center gap-3 group relative ${!isSidebarOpen && 'lg:justify-center'}`}>
+        <div className="px-4 py-6 border-b border-gold/10 text-white">
+          <div className="flex items-center gap-3 group relative">
             <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-gold/20 border border-gold/40">
               <User size={18} className="text-[#F0D060]" />
             </div>
-            {isSidebarOpen && (
-              <div className="flex-1 min-w-0">
-                <p className="font-cinzel text-xs font-bold text-gold truncate">
-                  {estudioso?.nome_completo || 'Estudioso'}
-                </p>
-                <div className="flex items-center gap-2">
-                   <p className="font-garamond text-[10px] italic text-white/60 truncate uppercase">Bibliothecarius</p>
-                   <button onClick={() => { setNovoNome(estudioso?.nome_completo || ''); setShowPerfilModal(true) }} className="opacity-0 group-hover:opacity-100"><Pencil size={10} className="text-gold" /></button>
-                </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-cinzel text-xs font-bold text-gold truncate">
+                {estudioso?.nome_completo || 'Estudioso'}
+              </p>
+              <div className="flex items-center gap-2">
+                 <p className="font-garamond text-[10px] italic text-white/60 truncate uppercase">Bibliothecarius</p>
+                 <button onClick={() => { setNovoNome(estudioso?.nome_completo || ''); setShowPerfilModal(true) }} className="opacity-0 group-hover:opacity-100"><Pencil size={10} className="text-gold" /></button>
               </div>
-            )}
+            </div>
           </div>
         </div>
 
-        <nav className="flex-1 px-3 py-6 space-y-2 overflow-y-auto">
+        <nav className="flex-1 px-3 py-6 space-y-2 overflow-y-auto custom-scrollbar">
           {filteredMenuItems.map(item => (
             <button
               key={item.id}
               onClick={() => { setActiveView(item.id as ActiveView); if (window.innerWidth < 1024) setIsSidebarOpen(false); }}
               className={`w-full flex items-center gap-4 px-4 py-3 rounded-lg font-cinzel text-[10px] tracking-widest transition-all
-                ${activeView === item.id ? 'bg-gold text-[#3D1F0A] shadow-lg font-bold' : 'text-white/70 hover:bg-gold/10 hover:text-gold'}
-                ${!isSidebarOpen && 'lg:justify-center lg:px-0'}`}
-               title={!isSidebarOpen ? item.label : ''}
+                ${activeView === item.id ? 'bg-gold text-[#3D1F0A] shadow-lg font-bold' : 'text-white/70 hover:bg-gold/10 hover:text-gold'}`}
             >
               {item.icon}
-              {(isSidebarOpen || window.innerWidth < 1024) && <span className="truncate">{item.label}</span>}
+              <span className="truncate">{item.label}</span>
             </button>
           ))}
         </nav>
